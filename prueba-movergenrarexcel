@@ -1,0 +1,64 @@
+
+import pandas as pd
+import os
+import shutil
+
+nombresArchivos = os.listdir("modelosgenerados")
+lista_archivos = []
+
+# Crear carpeta de destino si no existe
+if not os.path.exists("leidos2"):
+    os.makedirs("leidos2")
+
+if not os.path.exists("filtrados"):
+    os.makedirs("filtrados")
+
+# Lista para almacenar filas filtradas
+filas_filtradas = []
+
+for nombre in nombresArchivos:
+
+    extension = os.path.splitext(nombre)[1]
+
+    print("=============== Nombre del Archivo=================")
+    print(nombre)
+    print(extension)
+    ruta_archivo = os.path.join("modelosgenerados", nombre)
+
+    pd.set_option('display.max_rows', None)
+
+    try:
+        if extension == ".csv":
+            df = pd.read_csv(ruta_archivo, sep=None, engine='python', encoding='windows-1252', on_bad_lines='skip')
+        elif extension == ".xlsx" or extension == ".xls":
+            df = pd.read_excel(ruta_archivo, sheet_name="Sheet1")
+        else:
+            continue  # Ignorar archivos que no son CSV ni Excel
+
+        print(df)
+        lista = df.to_dict(orient='records')
+        lista_archivos.append({
+            "nombre": nombre,
+            "datos": lista
+        })
+
+        # Filtrar y guardar coincidencias
+        for fila in lista:
+            if 'TELEFONO' in fila and isinstance(fila['TELEFONO'], str) and 'no disponible' in fila['TELEFONO'].lower():
+                filas_filtradas.append(fila)
+
+        # Mover archivo a carpeta de leídos
+        shutil.move(ruta_archivo, os.path.join("leidos2", nombre))
+        print(f"Archivo {ruta_archivo} movido a 'leidos2'")
+
+    except Exception as e:
+        print(f"❌ Error leyendo el archivo {nombre}: {e}")
+
+# Guardar resultados filtrados en un nuevo Excel
+if filas_filtradas:
+    df_filtrados = pd.DataFrame(filas_filtradas)
+    ruta_salida = os.path.join("filtrados", "datos_filtrados.xlsx")
+    df_filtrados.to_excel(ruta_salida, index=False)
+    print(f"✅ Datos filtrados guardados en: {ruta_salida}")
+else:
+    print("⚠️ No se encontraron datos que cumplan con el filtro.")

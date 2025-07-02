@@ -1,0 +1,157 @@
+
+import pandas as pd
+import os
+import shutil
+import datetime
+
+#Crear las carpetas 
+if not os.path.exists("leidos2"):
+    os.makedirs("leidos2")
+
+if not os.path.exists("datosfiltrados"):
+    os.makedirs("datosfiltrados")
+
+#Guardar archivos en carpetas
+nombresArchivos = os.listdir("modelosgenerados")
+lista_archivos = []
+
+for nombre in nombresArchivos:
+
+    extension = os.path.splitext(nombre)[1]
+    ruta_archivo = os.path.join("modelosgenerados", nombre)
+    
+    print("=============== Nombre del Archivo=================")
+    print(f"📄 {nombre}")
+    print(extension)
+
+   
+
+    #pd.set_option('display.max_rows', None)
+         # intentar leer con autodetección del separador
+    try:
+
+        if (extension == ".csv"):
+            df = pd.read_csv(ruta_archivo, sep=None, engine='python', encoding='windows-1252', on_bad_lines='skip')
+
+        elif (extension == ".xlsx" or extension == ".xls"):
+            df = pd.read_excel(ruta_archivo, sheet_name ="Sheet1")
+
+        else:
+            print(f"⚠️ Tipo de archivo no soportado: {nombre}")
+            continue
+
+
+        # Mostrar las primeras filas del archivo
+        #print(df.head())
+        print(df)
+        lista = df.to_dict(orient = 'records') # Lista de filas como diccionarios
+        lista_archivos.append({
+           "nombre" : nombre,
+           "datos" :  lista
+         })
+    
+        #Aplicar filtros
+        df_filtrado = df[
+            (df['TELEFONO'].astype(str).str.lower() != 'no disponible') &
+            (df['CORREO_ELECTRONICO'].astype(str).str.lower() != 'no disponible') &
+            (df['AREA'].astype(str).str.lower().str.contains('urbana', na=False)) &
+            (df['ESTADO'].astype(str).str.lower().str.contains('activa', na=False))
+        ]
+    
+        # Guardar resultado si hay datos filtrados
+        if not df_filtrado.empty:
+           nombre_base = os.path.splitext(nombre)[0]
+           nombre_salida = f"{nombre_base}_filtrado.xlsx"
+           ruta_salida = os.path.join("datosfiltrados", nombre_salida)
+           df_filtrado.to_excel(ruta_salida, index=False)
+           print(f"✅ Archivo filtrado guardado: {ruta_salida}")
+        else:
+           print(f"⚠️ No se encontraron filas que cumplan con los filtros en: {nombre}")
+
+        
+        # Crear diccionarios para almacenar IDs únicos por dimensión
+        dimensiones = {}
+        dimensiones_nombres = [
+            "FECHA_CORTE", "CODIGO_MODULAR", "CODIGO_LOCAL", "NOMBRE_IE", "DISTRITO", 
+            "CODIGO_UGEL", "NOMBRE_UGEL", "TIPO_PROGRAMA", "TURNO"
+        ]
+
+         # Asignar IDs únicos a cada valor de las dimensiones y crear DataFrames de dimensiones
+        for col in dimensiones_nombres:
+            valores_unicos = df_filtrado[col].dropna().unique()
+            dimensiones[col] = {valor: idx + 1 for idx, valor in enumerate(valores_unicos)}
+
+        # Crear listas para las tablas de dimensiones
+        tablas_dimensiones = {}
+        for  col in dimensiones_nombres:
+             tablas_dimensiones[col] = pd.DataFrame(
+                list(dimensiones[col].items()), columns=[f"ID_{col}", col]
+            )
+
+        # Crear la tabla de hechos con los IDs
+        registros = []
+        for _, row in df_filtrado.iterrows():
+            registros.append([
+                row["FECHA_CORTE"], pd.to_datetime(row["FECHA_CORTE"]).year,
+                pd.to_datetime(row["FECHA_CORTE"]).month, pd.to_datetime(row["FECHA_CORTE"]).day,
+                dimensiones["CODIGO_MODULAR"].get(row["CODIGO_MODULAR"]),
+                row["CODIGO_MODULAR"],
+                dimensiones["CODIGO_LOCAL"].get(row["CODIGO_LOCAL"]),
+                row["CODIGO_LOCAL"],
+                dimensiones["NOMBRE_IE"].get(row["NOMBRE_IE"]),
+                row["NOMBRE_IE"],
+                dimensiones["DISTRITO"].get(row["DISTRITO"]),
+                row["DISTRITO"],
+                dimensiones["CODIGO_UGEL"].get(row["CODIGO_UGEL"]),
+                row["CODIGO_UGEL"],
+                dimensiones["NOMBRE_UGEL"].get(row["NOMBRE_UGEL"]),
+                row["NOMBRE_UGEL"],
+                dimensiones["TIPO_PROGRAMA"].get(row["TIPO_PROGRAMA"]),
+                row["TIPO_PROGRAMA"],
+                dimensiones["TURNO"].get(row["TURNO"]),
+                row["TURNO"]
+            ])
+
+        # Crear DataFrame con la tabla de hechos
+        df_hechos = pd.DataFrame(registros, columns=[
+           "FECHA_CORTE", "Año", "Mes", "Día", 
+           "CODIGO_MODULAR", "Codigo_modular",
+           "CODIGO_LOCAL", "Codigo_local",
+           "NOMBRE_IE", "Nombre_IE",
+           "DISTRITO", "Distrito",
+           "CODIGO_UGEL", "Codigo_Ugel",
+           "NOMBRE_UGEL", "Nombre_Ugel",
+           "TIPO_PROGRAMA", "Tipo_Programa",
+           "TURNO", "Turno",
+        ])
+    
+        # Crear carpeta
+ 
+        if not os.path.exists("modelosgenerados2"):
+           os.makedirs("modelosgenerados2")
+ 
+
+        # Guardar en un archivo Excel con varias hojas
+        ruta_modelo = os.path.join("modelosgenerados2", f"{nombre_base}_modelo_Nuevo.xlsx")
+        with pd.ExcelWriter(ruta_modelo, engine="openpyxl") as writer:
+             df_hechos.to_excel(writer, sheet_name="Tabla_Hechos", index=False)
+             for col, df_dim in tablas_dimensiones.items():
+                 df_dim.to_excel(writer, sheet_name=f"Dim_{col}", index=False)
+
+        print(f"Modelo de datos generado en: {ruta_modelo}")
+
+
+            
+        # Mover el archivo a la carpeta "leidos"
+        shutil.move(ruta_archivo, os.path.join("leidos2", nombre))
+        print(f"📦 Archivo movido a carpeta 'leidos2': {nombre}")
+
+    
+    except Exception as e:
+        print(f"❌ Error al procesar {nombre}: {e}")
+
+
+  
+ 
+
+ 
