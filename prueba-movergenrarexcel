@@ -46,6 +46,7 @@ for nombre in nombresArchivos:
         for fila in lista:
             if 'TELEFONO' in fila and isinstance(fila['TELEFONO'], str) and 'no disponible' in fila['TELEFONO'].lower():
                 filas_filtradas.append(fila)
+                
 
         # Mover archivo a carpeta de leídos
         shutil.move(ruta_archivo, os.path.join("leidos2", nombre))
